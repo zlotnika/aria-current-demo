@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>vue-router: every query-only link is aria-current="page"</title>
+    <style>
+      body {
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+        max-width: 46rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        color: #1a1a1a;
+      }
+      code {
+        background: #f2f2f2;
+        padding: 0 0.25em;
+        border-radius: 3px;
+      }
+      nav ul,
+      .rows {
+        list-style: none;
+        padding: 0;
+      }
+      nav li {
+        display: inline-block;
+        margin-right: 1rem;
+      }
+      .rows li {
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        margin: 0.4rem 0;
+        padding: 0.5rem 0.75rem;
+      }
+      [aria-current="page"] {
+        outline: 2px dashed #c00;
+        outline-offset: 2px;
+      }
+      .badge {
+        color: #c00;
+        font-size: 0.85em;
+        margin-left: 0.5em;
+      }
+      pre {
+        background: #f6f6f6;
+        padding: 0.75rem;
+        overflow-x: auto;
+        font-size: 0.85em;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="https://unpkg.com/vue@3.5.42/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/vue-router@5.3.1/dist/vue-router.global.prod.js"></script>
+    <script>
+      const { createApp, h } = Vue;
+      const { createRouter, createWebHashHistory, RouterLink, RouterView } =
+        VueRouter;
+
+      const MEDICATIONS = [
+        "Lisinopril",
+        "Metformin",
+        "Atorvastatin",
+        "Levothyroxine",
+        "Amlodipine",
+      ];
+
+      const Patient = {
+        setup() {
+          return () => {
+            const route = router.currentRoute.value;
+            return h("main", [
+              h("h1", "Patient chart"),
+              h("p", [
+                "Each row is a ",
+                h("code", '<RouterLink :to="{ query: { edit: id } }">'),
+                " that opens an edit form in place. They all point at this same route with a different ",
+                h("code", "?edit="),
+                ", so Vue Router's ",
+                h("code", "isExactActive"),
+                " (route record + params, query ignored) is true for every one, and each gets ",
+                h("code", 'aria-current="page"'),
+                '. A screen reader announces "current page" on all of them. Outlined in red below.',
+              ]),
+              h("h2", "Medications"),
+              h(
+                "ul",
+                { class: "rows" },
+                MEDICATIONS.map((name, i) =>
+                  h("li", [
+                    h(
+                      RouterLink,
+                      { to: { query: { edit: String(i + 1) } } },
+                      () => name,
+                    ),
+                    route.query.edit === String(i + 1)
+                      ? h("span", { class: "badge" }, "(editing)")
+                      : null,
+                  ]),
+                ),
+              ),
+              h("h2", "Filters"),
+              h("ul", { class: "rows" }, [
+                h("li", [
+                  h(
+                    RouterLink,
+                    { to: { query: { status: "active" } } },
+                    () => "Active",
+                  ),
+                ]),
+                h("li", [
+                  h(
+                    RouterLink,
+                    { to: { query: { status: "stopped" } } },
+                    () => "Stopped",
+                  ),
+                ]),
+                h("li", [
+                  h(RouterLink, { to: { query: {} } }, () => "Clear filters"),
+                ]),
+              ]),
+              h("h2", "aria-current on this page right now"),
+              h("pre", { id: "report" }),
+            ]);
+          };
+        },
+      };
+      const Other = {
+        render: () =>
+          h("main", [
+            h("h1", "Another page"),
+            h("p", "Only the nav link to this page is current here."),
+          ]),
+      };
+
+      const router = createRouter({
+        history: createWebHashHistory(),
+        routes: [
+          { path: "/", component: Patient },
+          { path: "/other", component: Other },
+        ],
+      });
+
+      const App = {
+        setup() {
+          const report = () => {
+            const pre = document.getElementById("report");
+            if (pre)
+              pre.textContent = [...document.querySelectorAll("[aria-current]")]
+                .map(
+                  (e) =>
+                    `aria-current="${e.getAttribute("aria-current")}"  ${e.getAttribute("href")}  ${e.textContent}`,
+                )
+                .join("\n");
+          };
+          Vue.onMounted(() => Vue.nextTick(report));
+          router.afterEach(() => Vue.nextTick(report));
+          return () =>
+            h("div", [
+              h("nav", { "aria-label": "Main" }, [
+                h("ul", [
+                  h("li", [h(RouterLink, { to: "/" }, () => "Chart")]),
+                  h("li", [
+                    h(RouterLink, { to: "/other" }, () => "Another page"),
+                  ]),
+                ]),
+              ]),
+              h(RouterView),
+              h("footer", [
+                h("p", [
+                  "Vue ",
+                  Vue.version,
+                  " · vue-router 5 (",
+                  h("code", "isExactActive"),
+                  " ignores ",
+                  h("code", "query"),
+                  ": ",
+                  h(
+                    "a",
+                    {
+                      href: "https://router.vuejs.org/guide/essentials/active-links.html",
+                    },
+                    "docs",
+                  ),
+                  "). Same result in Nuxt, whose ",
+                  h("code", "NuxtLink"),
+                  " renders RouterLink. Context: ",
+                  h(
+                    "a",
+                    {
+                      href: "https://github.com/dequelabs/axe-core/issues/5442",
+                    },
+                    "dequelabs/axe-core#5442",
+                  ),
+                  ".",
+                ]),
+              ]),
+            ]);
+        },
+      };
+
+      createApp(App).use(router).mount("#app");
+    </script>
+  </body>
+</html>
